@@ -467,7 +467,7 @@ const SwapProvider = ({ children }: Props) => {
   const swap = useCallback(async () => {
     if (!selectedChain || !fromToken || !toToken || !address) throw new Error<{ reason: string }>({ reason: 'missin params', statusCode: 1 });
     let currentStep = ``
-    const needApprove = await needApproveforSwap(selectedChain.chainId, fromToken, address, fromTokenAmount.raw);
+    const needApprove = await needApproveforSwap(selectedChain.chainId, fromToken, address, fromTokenAmount.value.toNumber());
     console.log('needApprove', needApprove)
     // try {
 
