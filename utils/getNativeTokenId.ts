@@ -1,20 +1,15 @@
-export default function getNativeTokenId(chainId: string) {
+export default function getNativeTokenId(chainId: number) {
   switch (chainId) {
-    case '1':
+    case 1:
       return 'ethereum';
-    case '137':
+    case 137:
       return 'matic-network';
-    case '42161':
+    case 42161:
       return 'ethereum';
-    case '250':
-      return 'fantom';
-    case '43114':
-      return 'avalanche-2';
-    case '56':
-      return 'binancecoin';
-    case '1284':
-      return 'moonbeam';
+    case 10:
+      return 'ethereum';
     default:
-      return 'ethereum';
+      throw new Error("Invalid chainId");
+      
   }
 }
