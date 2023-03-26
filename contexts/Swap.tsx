@@ -17,7 +17,7 @@ import { ActionMeta, SelectInstance, SingleValue } from "react-select";
 import { BaseToken, mainnetTokens } from "../config/tokens";
 import useList from "../hooks/useList";
 import { useApiService } from "./ApiService";
-import { formatUnits } from "ethers/lib/utils.js";
+import { formatEther, formatUnits } from "ethers/lib/utils.js";
 import { useModal } from "../hooks/useModal";
 import paginateTokensList from "../utils/paginateTokensList";
 import { BigNumber, constants } from "ethers";
@@ -71,6 +71,8 @@ interface SwapContextInterface {
   txCost: TxCost;
   selectedChain: Chain;
   txHashUrl: TxHashUrl;
+  needMoreAllowance: boolean;
+  insufficientBalance: boolean;
 }
 
 export type ChainOption = { label: string; value: number; image: string };
@@ -133,9 +135,10 @@ const SwapProvider = ({ children }: Props) => {
 
   const fromTokenRef = useRef<SelectInstance<BaseToken>>(null);
   const toTokenRef = useRef<SelectInstance<BaseToken>>(null);
-
-  const [fromTokenAmount, setFromTokenAmount] = useState<Amount>(processTokenAmount('1', 6));
+  const [fromTokenAmount, setFromTokenAmount] = useState<Amount>(processTokenAmount());
   const [fromTokenBalance, setFromTokenBalance] = useState<Amount>(processTokenAmount());
+  const [needMoreAllowance, setNeedMoreAllowance] = useState(false)
+  const [insufficientBalance, setInsufficientBalance] = useState(false)
 
   const [toTokenAmount, setToTokenAmount] = useState<Amount>(processTokenAmount());
 
@@ -208,7 +211,7 @@ const SwapProvider = ({ children }: Props) => {
     if (!e.target.value || !(parseInt(e.target.value) > 0) && !e.target.value.includes('.')) {
       setFromTokenAmount(processTokenAmount())
       setFromTokenAmount((prev) => ({ ...prev, formated: '0' }))
-
+      setToTokenAmount(processTokenAmount())
       return;
     }
     let currentValue = e.target.value
@@ -255,7 +258,7 @@ const SwapProvider = ({ children }: Props) => {
     if (newValue) {
       if (newValue.symbol == toToken?.symbol) {
         return
-      } 
+      }
       setFromToken(newValue);
       setFromTokenAmount(processTokenAmount('1', newValue.decimals))
       hideModalFromToken();
@@ -267,7 +270,7 @@ const SwapProvider = ({ children }: Props) => {
     if (newValue) {
       if (newValue.symbol == fromToken?.symbol) {
         return
-      } 
+      }
       setToToken(newValue);
       hideModalToToken();
       setPageToToken(1);
@@ -282,7 +285,7 @@ const SwapProvider = ({ children }: Props) => {
   }
 
   useEffect(() => {
-    if(!chain) {
+    if (!chain) {
       return;
     }
     const selectedSourceChain = Object.values(mainnetChains).find((x) => x.chainId === (chain?.id ?? 1));
@@ -296,21 +299,33 @@ const SwapProvider = ({ children }: Props) => {
     const wrapedNative = getNativeSymbol(selectedChain.name.toLocaleLowerCase())
     clearFromTokensList();
     const chainName = selectedChain.name.toLowerCase()
+    clearFromTokensList()
+    clearToTokensList()
     const tokens = mainnetTokens[chainName];
     setFromTokensList(tokens.slice(0, 50))
-    const fromTokenSelected = tokens.find((x) => x.symbol === 'USDT');
     setToTokensList(tokens.slice(0, 50))
-    const toTokenSelected = tokens.find((x) => x.symbol === wrapedNative);
+    const fromTokenSelected = tokens.find((x) => x.symbol === wrapedNative);
+    const usdtTokenIndex = tokens.findIndex((x) => x.symbol === 'USDT');
+    const usdcTokenIndex = tokens.findIndex((x) => x.symbol === 'USDC');
+    const daiTokenIndex = tokens.findIndex((x) => x.symbol === 'DAI');
 
     if (fromTokenSelected) {
       fromTokenRef.current?.selectOption(fromTokenSelected)
       setFromToken(fromTokenSelected)
+      setFromTokenAmount(processTokenAmount('1', fromToken?.decimals))
     }
-
-    if (toTokenSelected) {
-      toTokenRef.current?.selectOption(toTokenSelected)
-      setToToken(toTokenSelected)
-
+    if (usdtTokenIndex !== -1){
+      toTokenRef.current?.selectOption(tokens[usdtTokenIndex])
+      setToToken(tokens[usdtTokenIndex])
+    } else if (usdtTokenIndex === -1 && usdcTokenIndex !== -1) {
+      toTokenRef.current?.selectOption(tokens[usdcTokenIndex])
+      setToToken(tokens[usdcTokenIndex])
+    } else if (daiTokenIndex != -1 && usdcTokenIndex === -1 && usdtTokenIndex === -1) {
+      toTokenRef.current?.selectOption(tokens[daiTokenIndex])
+      setToToken(tokens[daiTokenIndex])
+    } else {
+      toTokenRef.current?.selectOption(tokens[0])
+      setToToken(tokens[0])
     }
   }, [selectedChain])
 
@@ -323,26 +338,36 @@ const SwapProvider = ({ children }: Props) => {
     setNotification({ title: 'Switch Network', description: errorSwitchNetwork.message, type: 'error' });
   }, [errorSwitchNetwork])
 
-  const fetchTokenBalance = useCallback(async (token: BaseToken) => {
-    if (!address || isLoadingSwitchNetwork) return;
-    return await fetchBalance({
+  useEffect(() => {
+    if (!address || isLoadingSwitchNetwork || !fromToken) {
+      return;
+    }
+    fetchBalance({
       address,
-      token: token.address !== '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' ? token.address as `0x${string}` : undefined,
+      token: fromToken.address !== '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' ? fromToken.address as `0x${string}` : undefined,
       chainId: selectedChain.chainId
-
+    }).then((response) => {
+      setFromTokenBalance(processTokenAmount(response.value))
+      setInsufficientBalance(fromTokenAmount.value.gt(response.value))
     })
-  }, [address, selectedChain, isLoadingSwitchNetwork]);
+  }, [address, selectedChain, fromToken, isLoadingSwitchNetwork, fromTokenAmount]);
 
-  const calculateGasPriceInUsd = useCallback(async (chainId: number, gasLimit: string) => {
-    const nativeTokenId = getNativeTokenId(chainId.toString());
-    const { gasPrice } = await fetchFeeData({ chainId: chainId });
-    let nativeTokenPrice = '0';
+  const calculateGasPriceInUsd = useCallback(async (chainId: number, gasLimit: string | BigNumber) => {
+    const nativeTokenId = getNativeTokenId(chainId);
     try {
-      nativeTokenPrice = (await apiService.getNativeTokenPrice({ ids: nativeTokenId, vs_currencies: 'usd' }))[nativeTokenId]['usd']
+      const { gasPrice } = await fetchFeeData({ chainId: chainId });
+      if (!gasPrice) {
+        return 0
+      }
+      const nativeTokenPrice = (await apiService.getNativeTokenPrice({ ids: nativeTokenId, vs_currencies: 'usd' }))[nativeTokenId]['usd']
+      const estimatedGas = parseFloat(formatEther(gasPrice.mul(gasLimit)))
+      return estimatedGas * nativeTokenPrice
     } catch (error) {
       console.log('call coingecko api fail')
+      return 0
     }
-    return getGasCost(gasLimit, gasPrice ?? BigNumber.from(formatUnits(20, 'gwei')), nativeTokenPrice)
+
+    //getGasCost(gasLimit, gasPrice ?? BigNumber.from(formatUnits(20, 'gwei')), nativeTokenPrice)
 
   }, [apiService])
 
@@ -350,11 +375,11 @@ const SwapProvider = ({ children }: Props) => {
 
     let txCostValue = 0;
     let txCostState: 'fetching' | 'done' = 'fetching';
-
+    console.log('from getquote selectedChain id', selectedChain.chainId)
     if (
       !fromToken ||
       !toToken ||
-      !fromTokenAmount.value.gt(0) ||
+      fromTokenAmount.value.isZero() ||
       isLoadingSwitchNetwork ||
       openModalFromToken ||
       openModalToToken ||
@@ -380,11 +405,15 @@ const SwapProvider = ({ children }: Props) => {
         gasPrice: gasPriceSource?.toString() ?? '150000000000'
       })
 
-      const estimatedGas = await calculateGasPriceInUsd(selectedChain.chainId, response.bestResult.gasUnitsConsumed);
+      const estimatedGasValue = await calculateGasPriceInUsd(selectedChain.chainId, response.bestResult.gasUnitsConsumed);
 
-      txCostValue = txCostValue + estimatedGas
+      txCostValue = txCostValue + estimatedGasValue
       const toTokenAmount = processTokenAmount(BigNumber.from(response.bestResult.toTokenAmount), toToken.decimals)
       setToTokenAmount(toTokenAmount)
+
+      txCostState = 'done'
+      setTxCost({ value: txCostValue, state: txCostState });
+
     } catch (err: any) {
       txCostState = 'done'
       setNotification({ title: 'getQuote', description: err.data?.reason ?? err.data?.description ?? null, type: 'error' })
@@ -416,31 +445,44 @@ const SwapProvider = ({ children }: Props) => {
   }, [getQuote])
 
   const readySwap = useMemo(() => {
-    return !!(fromToken && toToken && address && fromTokenAmount.value.gt(0) && selectedChain)
+    return !!(fromToken && toToken && address && selectedChain && txCost.state === 'done' && !insufficientBalance)
   }, [
     fromToken,
     toToken,
-    fromTokenAmount,
     address,
     selectedChain,
+    txCost,
+    insufficientBalance
   ])
 
-  const needApproveforSwap = useCallback(async (chainId: number, token: BaseToken, owner: string, amount: number) => {
-    const { address: spender } = await apiService.getSpenderAddress(chainId)
-    const allowance = await getTokenAllowance(chainId, {
-      token: token.address,
-      owner,
-      spender
-    }, 
-    amount
-    )
 
-    console.log('allowance from needApproveforSwap', allowance)
-    
+  useEffect(() => {
+    if (!fromToken || !address || fromTokenAmount.value.isZero()) {
+      return
+    }
 
-    return false
+    if (fromToken.symbol === "ETH" || fromToken.symbol === "MATIC") {
+      setNeedMoreAllowance(false)
+      return;
+    }
 
-  }, [address, apiService]);
+    apiService.getSpenderAddress(selectedChain.chainId)
+      .then(async (response) => {
+        const spender = response.address;
+        const needMoreAllowance = await getTokenAllowance(
+          selectedChain.chainId,
+          fromTokenAmount.raw,
+          {
+            token: fromToken.address,
+            owner: address,
+            spender
+          }
+        )
+        setNeedMoreAllowance(needMoreAllowance)
+      })
+
+
+  }, [address, apiService, fromToken, address, fromTokenAmount, selectedChain]);
 
   const getApproveCallData = async (chainId: number, token: BaseToken, amount: string) => {
     let parsedAmount = amount;
@@ -467,8 +509,8 @@ const SwapProvider = ({ children }: Props) => {
   const swap = useCallback(async () => {
     if (!selectedChain || !fromToken || !toToken || !address) throw new Error<{ reason: string }>({ reason: 'missin params', statusCode: 1 });
     let currentStep = ``
-    const needApprove = await needApproveforSwap(selectedChain.chainId, fromToken, address, fromTokenAmount.value.toNumber());
-    console.log('needApprove', needApprove)
+    // const needApprove = await needApproveforSwap(selectedChain.chainId, fromToken, address, fromTokenAmount.value.toNumber());
+    // console.log('needApprove', needApprove)
     // try {
 
     //   if (needApprove) {
@@ -532,7 +574,7 @@ const SwapProvider = ({ children }: Props) => {
     //   throw new Error<TransactionError>({ step: 'swap', reason: err.data?.reason ?? err.data?.description ?? err.message ?? currentStep, statusCode: 1 });
     // }
 
-  }, [fromToken, toToken, fromTokenAmount, address, slippage, needApproveforSwap])
+  }, [fromToken, toToken, fromTokenAmount, address, slippage])
 
   return (
     <SwapContext.Provider value={{
@@ -568,7 +610,9 @@ const SwapProvider = ({ children }: Props) => {
       selectedChain,
       onChangeSelectedChain,
       swap,
-      txHashUrl
+      txHashUrl,
+      needMoreAllowance,
+      insufficientBalance
     }}>
       {children}
     </SwapContext.Provider>
