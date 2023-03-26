@@ -248,7 +248,7 @@ type NativeTokenPriceParams = {
   vs_currencies: string;
 };
 
-type NativeTokenPriceResponse = { [key: string]: { [key: string]: string } };
+type NativeTokenPriceResponse = { [key: string]: { [key: string]: number } };
 
 export class ApiClient implements ApiService {
   private readonly client: AxiosInstance;
