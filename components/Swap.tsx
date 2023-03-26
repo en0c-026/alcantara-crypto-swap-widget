@@ -156,7 +156,6 @@ export default function Swap() {
           <Transaction
             fromToken={fromToken}
             toToken={toToken}
-            chain={selectedChain}
             steps={steps}
             txHashUrl={txHashUrl}
             openModalTransaction={openModalTransaction}

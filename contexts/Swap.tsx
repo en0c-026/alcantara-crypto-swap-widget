@@ -35,7 +35,7 @@ import getNativeSymbol from "../utils/getNativeSymbol";
 import getExplorerUrl from "../utils/getExplorerUrl";
 import processTokenAmount from "../utils/processTokenAmount";
 import { SwapCallDataParamsV2 } from "../utils/apiClient";
-import { useAlchemyService } from "./AlchemyService";
+import { Transaction, useAlchemyService } from "./AlchemyService";
 
 interface SwapContextInterface {
   chains: Chain[];
@@ -94,9 +94,8 @@ interface Props {
 const SwapContext = createContext<SwapContextInterface | undefined>(undefined);
 
 const stepsInitialState: Steps = {
-  swapBeforeBridge: { state: 'loading' },
-  bridge: { state: 'loading' },
-  swapAfterBridge: { state: 'loading' }
+  approve: { state: 'loading' },
+  swap: { state: 'loading' }
 };
 
 
@@ -129,9 +128,21 @@ const SwapProvider = ({ children }: Props) => {
     setList: setToTokensList
   } = useList<BaseToken>();
 
+  const {
+    list: latestTransactionsList,
+    addItem: addLatestTransactionsList,
+    clear: clearLatestTransactionsList,
+    setList: setLatestTransactionsList
+  } = useList<Transaction>();
+
   const [slippage, setSlippage] = useState("1");
   const [allowPartialFill, setAllowPartialFill] = useState(true);
-  const { getTokenAllowance } = useAlchemyService()
+  const { 
+    getTokenAllowance, 
+    getTokenBalance, 
+    getEthBalance,
+    getLastestTransactions
+  } = useAlchemyService()
 
   const fromTokenRef = useRef<SelectInstance<BaseToken>>(null);
   const toTokenRef = useRef<SelectInstance<BaseToken>>(null);
@@ -327,6 +338,7 @@ const SwapProvider = ({ children }: Props) => {
       toTokenRef.current?.selectOption(tokens[0])
       setToToken(tokens[0])
     }
+
   }, [selectedChain])
 
   useEffect(() => {
@@ -338,17 +350,35 @@ const SwapProvider = ({ children }: Props) => {
     setNotification({ title: 'Switch Network', description: errorSwitchNetwork.message, type: 'error' });
   }, [errorSwitchNetwork])
 
+
+  // fetch balance hook
   useEffect(() => {
     if (!address || isLoadingSwitchNetwork || !fromToken) {
       return;
+    } 
+    if (fromToken.address === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee") {
+      getEthBalance(selectedChain.chainId, {
+        owner: address
+      }).then((response) => {
+        console.log('response from getEthBalance', response)
+        setFromTokenBalance(response)
+        setInsufficientBalance(fromTokenAmount.value.gt(response.value))
+      })
+    } else {
+      getTokenBalance(selectedChain.chainId, {
+        owner: address,
+        token: fromToken
+      }).then((response) => {
+        console.log('response from getTokenBalance', response)
+        setFromTokenBalance(response)
+        setInsufficientBalance(fromTokenAmount.value.gt(response.value))
+      })
     }
-    fetchBalance({
-      address,
-      token: fromToken.address !== '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' ? fromToken.address as `0x${string}` : undefined,
-      chainId: selectedChain.chainId
-    }).then((response) => {
-      setFromTokenBalance(processTokenAmount(response.value))
-      setInsufficientBalance(fromTokenAmount.value.gt(response.value))
+
+    getLastestTransactions(selectedChain.chainId, {
+      owner: address
+    }).then((result) => {
+      console.log('result from getLastestTransactions', result)
     })
   }, [address, selectedChain, fromToken, isLoadingSwitchNetwork, fromTokenAmount]);
 
@@ -509,72 +539,75 @@ const SwapProvider = ({ children }: Props) => {
   const swap = useCallback(async () => {
     if (!selectedChain || !fromToken || !toToken || !address) throw new Error<{ reason: string }>({ reason: 'missin params', statusCode: 1 });
     let currentStep = ``
-    // const needApprove = await needApproveforSwap(selectedChain.chainId, fromToken, address, fromTokenAmount.value.toNumber());
-    // console.log('needApprove', needApprove)
-    // try {
+     try {
 
-    //   if (needApprove) {
-    //     const approveCallData = await getApproveCallData(selectedChain.chainId, fromToken, fromTokenAmount.raw);
-    //     const approveConfig = await prepareSendTransaction({
-    //       request: {
-    //         to: approveCallData.to,
-    //         data: approveCallData.data,
-    //         value: approveCallData.value,
-    //       }
-    //     })
-    //     currentStep = `approve ${fromToken.symbol} for swap`;
-    //     const approveTx = await sendTransaction(approveConfig);
-    //     await approveTx.wait()
-    //     console.log('approve hash', approveTx.hash)
-    //   }
+      if (needMoreAllowance) {
+        const approveCallData = await getApproveCallData(selectedChain.chainId, fromToken, fromTokenAmount.raw);
+        const approveConfig = await prepareSendTransaction({
+          request: {
+            to: approveCallData.to,
+            data: approveCallData.data,
+            value: approveCallData.value,
+          }
+        })
+        currentStep = `approve ${fromToken.symbol} for swap`;
+        const approveTx = await sendTransaction(approveConfig);
+        await approveTx.wait(2)
+        console.log('approve hash', approveTx.hash)
+        changeSteps('approve', 'completed')
 
-    //   const { gasPrice } = await fetchFeeData({ chainId: selectedChain.chainId })
+      }
 
-    //   const quote = await apiService.getQuoteV2(selectedChain.chainId, {
-    //     fromTokenAddress: fromToken.address,
-    //     toTokenAddress: toToken.address,
-    //     amount: fromTokenAmount.raw,
-    //     preset: 'maxReturnResult',
-    //     gasPrice: gasPrice?.toString() ?? '150000000000'
-    //   })
+       const { gasPrice } = await fetchFeeData({ chainId: selectedChain.chainId })
 
-    //   const swapCallData = await getSwapCallData(selectedChain.chainId, {
-    //     fromTokenAddress: fromToken.address,
-    //     toTokenAddress: toToken.address,
-    //     amount: fromTokenAmount.raw,
-    //     guaranteedAmount: quote.bestResult.toTokenAmount,
-    //     allowedSlippagePercent: parseFloat(slippage),
-    //     walletAddress: address as string,
-    //     pathfinderData: {
-    //       routes: quote.bestResult.routes,
-    //       mainParts: quote.preset.mainParts,
-    //       splitParts: quote.preset.subParts,
-    //       deepLevel: quote.preset.deepLevel
-    //     },
-    //     gasPrice: gasPrice?.toString() ?? '150000000000'
-    //   });
-    //   const spender = await apiService.getSpenderAddress(selectedChain.chainId)
-    //   const swapConfig = await prepareSendTransaction({
-    //     request: {
-    //       data: swapCallData.data,
-    //       from: address,
-    //       gasLimit: swapCallData.gasLimit,
-    //       to: spender.address,
-    //       value: swapCallData.ethValue
-    //     }
-    //   })
+      const quote = await apiService.getQuoteV2(selectedChain.chainId, {
+        fromTokenAddress: fromToken.address,
+        toTokenAddress: toToken.address,
+        amount: fromTokenAmount.raw,
+        preset: 'maxReturnResult',
+        gasPrice: gasPrice?.toString() ?? '50000000000'
+      })
 
-    //   currentStep = ``
-    //   const swapTx = await sendTransaction(swapConfig);
-    //   await swapTx.wait(2)
-    //   console.log('swap hash', swapTx.hash)
-    //   setTxHashUrl(swapTx.hash);
+      const swapCallData = await getSwapCallData(selectedChain.chainId, {
+        fromTokenAddress: fromToken.address,
+        toTokenAddress: toToken.address,
+        amount: fromTokenAmount.raw,
+        guaranteedAmount: quote.bestResult.toTokenAmount,
+        allowedSlippagePercent: parseFloat(slippage),
+        walletAddress: address as string,
+        pathfinderData: {
+          routes: quote.bestResult.routes,
+          mainParts: quote.preset.mainParts,
+          splitParts: quote.preset.subParts,
+          deepLevel: quote.preset.deepLevel
+        },
+        gasPrice: gasPrice?.toString() ?? '50000000000'
+      });
+      const spender = await apiService.getSpenderAddress(selectedChain.chainId)
+      const swapConfig = await prepareSendTransaction({
+        request: {
+          data: swapCallData.data,
+          from: address,
+          gasLimit: swapCallData.gasLimit,
+          to: spender.address,
+          value: swapCallData.ethValue
+        }
+      })
 
-    // } catch (err: any) {
-    //   throw new Error<TransactionError>({ step: 'swap', reason: err.data?.reason ?? err.data?.description ?? err.message ?? currentStep, statusCode: 1 });
-    // }
+       currentStep = `swap ${fromToken.symbol} to  ${toToken.symbol}`
+      const swapTx = await sendTransaction(swapConfig);
+      await swapTx.wait(2)
+      console.log('swap hash', swapTx.hash)
+      changeSteps('swap', 'completed')
+      setTxHashUrl(`${getExplorerUrl(selectedChain.chainId)}/tx/${swapTx.hash}`);
+       currentStep = `swap succesfully`
+     } catch (err: any) {
+       changeSteps('swap', 'failed')
 
-  }, [fromToken, toToken, fromTokenAmount, address, slippage])
+       throw new Error<TransactionError>({ step: 'swap', reason: err.data?.reason ?? err.data?.description ?? err.message ?? currentStep, statusCode: 1 });
+     }
+
+  }, [fromToken, toToken, fromTokenAmount, address, slippage, needMoreAllowance, selectedChain])
 
   return (
     <SwapContext.Provider value={{
