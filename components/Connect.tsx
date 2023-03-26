@@ -27,9 +27,10 @@ export function Connect({ className }: Props) {
             {connectors
               .map((x) => (
                 <button
-                  className='bg-blue-600 rounded-xl py-2 font-semibold text-slate-50 hover:bg-blue-500 delay-100'
+                  className='bg-blue-600 w-full rounded-xl py-2 text-lg text-slate-50 disabled:text-slate-300 hover:bg-blue-500 delay-100 hover:cursor-pointer disabled:bg-blue-300 hover:disabled:bg-blue-300 hover:disabled:cursor-default'
                   key={x.id}
                   onClick={() => connect({ connector: x })}
+                  disabled={x.name !== 'MetaMask'}
                 >
                   {x.name === "Injected" ? "Other" : x.name}
                   {isLoading && x.id === pendingConnector?.id && ' (connecting)'}
