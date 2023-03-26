@@ -74,7 +74,9 @@ export default function Swap() {
     readySwap,
     steps,
     selectedChain,
-    txHashUrl
+    txHashUrl,
+    needMoreAllowance,
+    insufficientBalance
   } = useSwap();
 
 
@@ -143,8 +145,10 @@ export default function Swap() {
       </TokenCard>
     </div>
     <ActionButton
-      disabled={!readySwap}
+      disabled={!readySwap || fromTokenAmount.value.isZero()}
       onClick={swap}
+      insufficientBalance={insufficientBalance}
+      needMoreAllownce={needMoreAllowance}
     />
     {
       openModalTransaction && (
