@@ -41,7 +41,7 @@ export function getApiKeyByNetwork(network: string | undefined) {
       return `${process.env.NEXT_PUBLIC_ALCHEMY_ETHEREUM_API_URL}/${process.env.NEXT_PUBLIC_ALCHEMY_ETHEREUM_API_KEY}`;
     case "polygon":
       return `${process.env.NEXT_PUBLIC_ALCHEMY_POLYGON_API_URL}/${process.env.NEXT_PUBLIC_ALCHEMY_POLYGON_API_KEY}`;
-    case "arbitrum":
+    case "arbitrum one":
       return `${process.env.NEXT_PUBLIC_ALCHEMY_ARBITRUM_API_URL}/${process.env.NEXT_PUBLIC_ALCHEMY_ARBITRUM_API_KEY}`;
     case "optimism":
       return `${process.env.NEXT_PUBLIC_ALCHEMY_OPTIMISM_API_URL}/${process.env.NEXT_PUBLIC_ALCHEMY_OPTIMISM_API_KEY}`;
