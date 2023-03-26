@@ -17,5 +17,5 @@ export const mainnetTokens: { [key: string]: BaseToken[] } = {
   ethereum: [...Object.values(ethereumTokens.tokens)],
   polygon: [...Object.values(polygonTokens.tokens)],
   arbitrum: [...Object.values(arbitrumTokens.tokens)],
-  optimism: [...Object.values(arbitrumTokens.tokens)],
+  optimism: [...Object.values(optimismTokens.tokens)],
 };
