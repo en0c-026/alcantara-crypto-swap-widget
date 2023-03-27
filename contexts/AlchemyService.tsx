@@ -141,7 +141,7 @@ const AlchemyServiceProvider = ({ network, children }: Props) => {
       1
     } catch (error) {
       console.log('error on getTokenBalance', error)
-      throw new Error("error on getTokenBalance");
+      return processTokenAmount(BigNumber.from(0), token.decimals)
 
     }
 
