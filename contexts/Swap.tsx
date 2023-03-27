@@ -17,7 +17,7 @@ import { ActionMeta, SelectInstance, SingleValue } from "react-select";
 import { BaseToken, mainnetTokens } from "../config/tokens";
 import useList from "../hooks/useList";
 import { useApiService } from "./ApiService";
-import { formatEther, formatUnits } from "ethers/lib/utils.js";
+import { formatEther, formatUnits, parseEther } from "ethers/lib/utils.js";
 import { useModal } from "../hooks/useModal";
 import paginateTokensList from "../utils/paginateTokensList";
 import { BigNumber, constants } from "ethers";
@@ -323,7 +323,7 @@ const SwapProvider = ({ children }: Props) => {
     if (fromTokenSelected) {
       fromTokenRef.current?.selectOption(fromTokenSelected)
       setFromToken(fromTokenSelected)
-      setFromTokenAmount(processTokenAmount('1', fromToken?.decimals))
+      setFromTokenAmount(processTokenAmount(parseEther('1'), fromToken?.decimals))
     }
     if (usdtTokenIndex !== -1){
       toTokenRef.current?.selectOption(tokens[usdtTokenIndex])
@@ -405,7 +405,7 @@ const SwapProvider = ({ children }: Props) => {
 
     let txCostValue = 0;
     let txCostState: 'fetching' | 'done' = 'fetching';
-    console.log('from getquote selectedChain id', selectedChain.chainId)
+
     if (
       !fromToken ||
       !toToken ||
