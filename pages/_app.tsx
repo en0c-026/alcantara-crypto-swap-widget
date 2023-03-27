@@ -18,19 +18,19 @@ function App({ Component, pageProps }: AppProps) {
       <NextHead>
         <title>Alcantara - Cross Chain Swap</title>
       </NextHead>
-      <Layout>
-        <NotificationProvider> 
-            {
-              mounted ? (
-                <Component {...pageProps} />
-                ) : (
-                <div className='h-full flex'>
-                  <Spinner className='h-10 w-10 text-slate-100 m-auto animate-spin'/>
-                </div>
-              )
-            }
-        </NotificationProvider> 
-      </Layout>
+      <NotificationProvider>
+        <Layout>
+          {
+            mounted ? (
+              <Component {...pageProps} />
+            ) : (
+              <div className='flex h-full'>
+                  <Spinner className='h-9 w-9 text-slate-300 animate-spin m-auto' />
+              </div>
+            )
+          }
+        </Layout>
+      </NotificationProvider>
     </WagmiConfig>
   )
 }

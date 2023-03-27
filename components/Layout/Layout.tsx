@@ -5,8 +5,8 @@ interface Props {
 }
 export default function Layout({ children }: Props) {
   return (
-    <div className="w-96 border rounded-2xl border-slate-300">
-      <main>{children}</main>
+    <div className="w-96 border h-[25rem] rounded-2xl border-slate-300 relative">
+      {children}
     </div>
   );
 }
