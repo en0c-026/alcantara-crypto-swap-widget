@@ -69,7 +69,7 @@ interface SwapContextInterface {
   readySwap: boolean;
   swap: () => Promise<void>;
   txCost: TxCost;
-  selectedChain: Chain;
+  selectedChain: Chain | undefined;
   txHashUrl: TxHashUrl;
   needMoreAllowance: boolean;
   insufficientBalance: boolean;
@@ -103,7 +103,7 @@ const SwapProvider = ({ children }: Props) => {
   const apiService = useApiService();
   const { chain } = useNetwork();
   const { address } = useAccount();
-  const [selectedChain, setSelectedChain] = useState<Chain>(mainnetChains['ethereum']);
+  const [selectedChain, setSelectedChain] = useState<Chain | undefined>(undefined);
   const [fromToken, setFromToken] = useState<BaseToken>();
   const [toToken, setToToken] = useState<BaseToken>();
 
@@ -211,12 +211,18 @@ const SwapProvider = ({ children }: Props) => {
   }
 
   useEffect(() => {
-    paginate('from', selectedChain.name.toLowerCase(), pageFromToken)
-  }, [pageFromToken]);
+    if (!selectedChain) {
+      return;
+    }
+    paginate('from', selectedChain?.name.toLowerCase(), pageFromToken)
+  }, [pageFromToken, selectedChain]);
 
   useEffect(() => {
-    paginate('to', selectedChain.name.toLowerCase(), pageToToken)
-  }, [pageToToken]);
+    if (!selectedChain) {
+      return;
+    }
+    paginate('to', selectedChain?.name.toLowerCase(), pageToToken)
+  }, [pageToToken, selectedChain]);
 
   const onChangeFromTokenAmount = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     if (!e.target.value || !(parseInt(e.target.value) > 0) && !e.target.value.includes('.')) {
@@ -307,6 +313,7 @@ const SwapProvider = ({ children }: Props) => {
 
   useEffect(() => {
     if (!selectedChain) return;
+    console.log('from useEffect', selectedChain)
     const wrapedNative = getNativeSymbol(selectedChain.name.toLocaleLowerCase())
     clearFromTokensList();
     const chainName = selectedChain.name.toLowerCase()
@@ -323,7 +330,7 @@ const SwapProvider = ({ children }: Props) => {
     if (fromTokenSelected) {
       fromTokenRef.current?.selectOption(fromTokenSelected)
       setFromToken(fromTokenSelected)
-      setFromTokenAmount(processTokenAmount(parseEther('1'), fromToken?.decimals))
+      setFromTokenAmount(processTokenAmount(parseEther('1'), fromTokenSelected.decimals))
     }
     if (usdtTokenIndex !== -1){
       toTokenRef.current?.selectOption(tokens[usdtTokenIndex])
@@ -353,7 +360,7 @@ const SwapProvider = ({ children }: Props) => {
 
   // fetch balance hook
   useEffect(() => {
-    if (!address || isLoadingSwitchNetwork || !fromToken) {
+    if (!address || isLoadingSwitchNetwork || !fromToken || !selectedChain) {
       return;
     } 
     if (fromToken.address === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee") {
@@ -413,7 +420,8 @@ const SwapProvider = ({ children }: Props) => {
       isLoadingSwitchNetwork ||
       openModalFromToken ||
       openModalToToken ||
-      openModalTransaction
+      openModalTransaction ||
+      !selectedChain
     ) {
       setToTokenAmount(processTokenAmount())
       setTxCost({ value: txCostValue, state: txCostState });
@@ -487,7 +495,7 @@ const SwapProvider = ({ children }: Props) => {
 
 
   useEffect(() => {
-    if (!fromToken || !address || fromTokenAmount.value.isZero()) {
+    if (!fromToken || !address || fromTokenAmount.value.isZero() || !selectedChain) {
       return
     }
 

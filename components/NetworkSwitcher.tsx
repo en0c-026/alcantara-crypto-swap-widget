@@ -12,6 +12,9 @@ export default function NetworkSwitcher() {
   const { selectedChain, onChangeSelectedChain } = useSwap()
 
   useEffect(() => {
+    if(!selectedChain) {
+      return
+    }
     chainRef.current?.selectOption({
       label: selectedChain.name,
       value: selectedChain.chainId,
